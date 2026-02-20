@@ -212,6 +212,7 @@ function App() {
     const isOverUI = useRef(false)
     const lastPinchDist = useRef<number | null>(null)
     const activeTouchCount = useRef(0)
+    const isAdvancing = useRef(false)
 
     // --- タッチ・マウスドラッグ（穿刺モード時のみ） ---
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -305,6 +306,38 @@ function App() {
         if (e.touches.length < 2) {
             lastPinchDist.current = null
         }
+    }, [])
+
+    // --- 「針を進める」ボタン：押しながらドラッグで針を進行方向に移動 ---
+    const handleAdvanceDown = useCallback((e: React.PointerEvent) => {
+        if (mode !== 'needle' || phase !== 'pre-puncture') return
+        isAdvancing.current = true
+        lastPointer.current = { x: e.clientX, y: e.clientY }
+        ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    }, [mode, phase])
+
+    const handleAdvanceMove = useCallback((e: React.PointerEvent) => {
+        if (!isAdvancing.current) return
+        const dy = e.clientY - lastPointer.current.y
+        lastPointer.current = { x: e.clientX, y: e.clientY }
+
+        // 針の進行方向ベクトル（角度に基づく）
+        const angleRad = (needleAngle * Math.PI) / 180
+        const forward = new THREE.Vector3(-Math.cos(angleRad), -Math.sin(angleRad), 0)
+
+        setNeedlePos(prev => {
+            const newPos = prev.clone()
+            // 上にドラッグ = 前進、下にドラッグ = 後退
+            newPos.addScaledVector(forward, -dy * 0.008)
+            newPos.x = Math.max(-5, Math.min(5, newPos.x))
+            newPos.y = Math.max(-1.5, Math.min(4, newPos.y))
+            newPos.z = Math.max(-0.5, Math.min(3.0, newPos.z))
+            return newPos
+        })
+    }, [needleAngle])
+
+    const handleAdvanceUp = useCallback(() => {
+        isAdvancing.current = false
     }, [])
 
     // --- 穿刺判定（成功時カメラを断面図アングルに切替） ---
@@ -480,6 +513,39 @@ function App() {
                     />
                 </Canvas>
             </div>
+
+            {/* ===== 「針を進める」ボタン（穿刺モード・左側） ===== */}
+            {mode === 'needle' && phase === 'pre-puncture' && (
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 z-30 pointer-events-auto">
+                    <div
+                        className="flex flex-col items-center gap-2 select-none touch-none cursor-grab active:cursor-grabbing"
+                        onPointerDown={handleAdvanceDown}
+                        onPointerMove={handleAdvanceMove}
+                        onPointerUp={handleAdvanceUp}
+                        onPointerLeave={handleAdvanceUp}
+                    >
+                        {/* 上矢印（進行方向） */}
+                        <svg className="w-4 h-4 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                        </svg>
+
+                        {/* ボタン本体 */}
+                        <div className="w-14 h-24 rounded-2xl bg-emerald-500/30 border-2 border-emerald-400/50 backdrop-blur-md flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-500/10">
+                            <svg className="w-5 h-5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-4 4m4-4l4 4" />
+                            </svg>
+                            <span className="text-[9px] text-emerald-200 font-bold leading-tight text-center">針を<br />進める</span>
+                        </div>
+
+                        {/* 下矢印（後退方向） */}
+                        <svg className="w-4 h-4 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+
+                        <span className="text-[8px] text-white/30 mt-1">ドラッグ↑↓</span>
+                    </div>
+                </div>
+            )}
 
             {/* ===== 2Dクロスセクション・ミニマップ（穿刺モード時） ===== */}
             {mode === 'needle' && phase === 'pre-puncture' && (
