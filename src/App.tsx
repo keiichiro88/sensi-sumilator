@@ -31,6 +31,7 @@ function SimulatorScene({
     phase,
     mode,
     cameraRef,
+    controlsRef,
     onPuncture,
 }: {
     needlePos: THREE.Vector3
@@ -40,6 +41,7 @@ function SimulatorScene({
     phase: Phase
     mode: Mode
     cameraRef: React.MutableRefObject<THREE.Camera | null>
+    controlsRef: React.MutableRefObject<any>
     onPuncture: () => void
 }) {
     useFrame(() => {
@@ -58,6 +60,7 @@ function SimulatorScene({
 
             {/* カメラモード時のみOrbitControls有効 */}
             <OrbitControls
+                ref={controlsRef}
                 target={[0, -0.8, 0.2]}
                 enableDamping
                 dampingFactor={0.1}
@@ -203,9 +206,12 @@ function App() {
 
     // ドラッグ管理
     const cameraRef = useRef<THREE.Camera | null>(null)
+    const controlsRef = useRef<any>(null)
     const isDragging = useRef(false)
     const lastPointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
     const isOverUI = useRef(false)
+    const lastPinchDist = useRef<number | null>(null)
+    const activeTouchCount = useRef(0)
 
     // --- タッチ・マウスドラッグ（穿刺モード時のみ） ---
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -218,6 +224,7 @@ function App() {
 
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
         if (!isDragging.current || mode !== 'needle' || phase !== 'pre-puncture') return
+        if (activeTouchCount.current > 1) return // ピンチ中はドラッグ無効
 
         const dx = e.clientX - lastPointer.current.x
         const dy = e.clientY - lastPointer.current.y
@@ -264,10 +271,56 @@ function App() {
         })
     }, [mode])
 
-    // --- 穿刺判定 ---
+    // --- ピンチ（2本指）で奥行き調整（モバイル対応） ---
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        activeTouchCount.current = e.touches.length
+        if (mode !== 'needle' || phase !== 'pre-puncture') return
+        if (e.touches.length === 2) {
+            isDragging.current = false
+            const dx = e.touches[0].clientX - e.touches[1].clientX
+            const dy = e.touches[0].clientY - e.touches[1].clientY
+            lastPinchDist.current = Math.sqrt(dx * dx + dy * dy)
+        }
+    }, [mode, phase])
+
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
+        if (mode !== 'needle' || phase !== 'pre-puncture') return
+        if (e.touches.length === 2 && lastPinchDist.current !== null) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX
+            const dy = e.touches[0].clientY - e.touches[1].clientY
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            const delta = (dist - lastPinchDist.current) * 0.005
+            lastPinchDist.current = dist
+            setNeedlePos(prev => {
+                const p = prev.clone()
+                // ピンチアウト(広げる)=浅く、ピンチイン(狭める)=深く
+                p.z = Math.max(-0.5, Math.min(3.0, p.z - delta))
+                return p
+            })
+        }
+    }, [mode, phase])
+
+    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+        activeTouchCount.current = e.touches.length
+        if (e.touches.length < 2) {
+            lastPinchDist.current = null
+        }
+    }, [])
+
+    // --- 穿刺判定（成功時カメラを断面図アングルに切替） ---
     const handlePuncture = useCallback(() => {
         if (phase === 'pre-puncture') {
             setPhase('punctured')
+            setMode('camera')
+            // カメラを断面図（横アングル）に自動切替
+            requestAnimationFrame(() => {
+                const controls = controlsRef.current
+                if (controls) {
+                    controls.object.position.set(7, 0.3, 1.2)
+                    controls.target.set(0, -0.8, 0.2)
+                    controls.update()
+                }
+            })
         }
     }, [phase])
 
@@ -323,8 +376,8 @@ function App() {
                             </div>
                             <span className="text-white/60 text-xs">
                                 {mode === 'camera'
-                                    ? 'ドラッグで回転 ・ ホイールでズーム ・ アングルを決めて穿刺モードへ'
-                                    : 'ドラッグで針を移動 ・ ホイールで奥行き調整 ・ 右下の断面図で位置確認'
+                                    ? 'ドラッグで回転 ・ ピンチ/ホイールでズーム ・ アングルを決めて穿刺モードへ'
+                                    : 'ドラッグで移動 ・ ピンチ/ホイールで奥行き ・ 右下の断面図で位置確認'
                                 }
                             </span>
                         </div>
@@ -395,6 +448,9 @@ function App() {
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerUp}
                 onWheel={handleWheel}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
             >
                 <Canvas
                     shadows
@@ -419,6 +475,7 @@ function App() {
                         phase={phase}
                         mode={mode}
                         cameraRef={cameraRef}
+                        controlsRef={controlsRef}
                         onPuncture={handlePuncture}
                     />
                 </Canvas>
