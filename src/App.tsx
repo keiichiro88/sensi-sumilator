@@ -392,21 +392,21 @@ function App() {
                 onPointerLeave={() => { isOverUI.current = false }}
             >
                 {/* モード切替ボタン */}
-                <div className="flex flex-col items-center gap-1 bg-black/50 backdrop-blur-md rounded-2xl px-2 py-2 border border-white/10 pointer-events-auto">
+                <div className="flex flex-col items-center gap-2 bg-black/70 backdrop-blur-md rounded-2xl px-3 py-3 border border-white/20 pointer-events-auto shadow-xl">
                     <button
                         onClick={() => setMode('camera')}
-                        className={`w-14 py-1.5 rounded-xl text-[10px] font-medium transition-all ${mode === 'camera'
-                            ? 'bg-blue-500/40 text-blue-200 border border-blue-400/40 shadow-lg shadow-blue-500/10'
-                            : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'
+                        className={`w-20 py-2.5 rounded-xl text-xs font-bold transition-all ${mode === 'camera'
+                            ? 'bg-blue-500/50 text-white border-2 border-blue-400/60 shadow-lg shadow-blue-500/20'
+                            : 'bg-white/10 text-white/50 border-2 border-transparent hover:bg-white/15'
                             }`}
                     >
                         カメラ
                     </button>
                     <button
                         onClick={() => setMode('needle')}
-                        className={`w-14 py-1.5 rounded-xl text-[10px] font-medium transition-all ${mode === 'needle'
-                            ? 'bg-emerald-500/40 text-emerald-200 border border-emerald-400/40 shadow-lg shadow-emerald-500/10'
-                            : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'
+                        className={`w-20 py-2.5 rounded-xl text-xs font-bold transition-all ${mode === 'needle'
+                            ? 'bg-emerald-500/50 text-white border-2 border-emerald-400/60 shadow-lg shadow-emerald-500/20'
+                            : 'bg-white/10 text-white/50 border-2 border-transparent hover:bg-white/15'
                             }`}
                     >
                         穿刺
