@@ -35,34 +35,34 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
         return new THREE.LatheGeometry(points, 24)
     }, [])
 
-    // ===== 内筒ハブ（SVG準拠：段差付き複雑形状） =====
+    // ===== 内筒ハブ（外筒ハブ幅に揃えた太め形状） =====
     const innerHubGeometry = useMemo(() => {
         const points: THREE.Vector2[] = []
         // 先端（閉じ）
         points.push(new THREE.Vector2(0, 0))
         // 針との接合部
-        points.push(new THREE.Vector2(0.035, 0.02))
-        points.push(new THREE.Vector2(0.04, 0.05))
-        // グリップ段差1（メインボディ前半）
-        points.push(new THREE.Vector2(0.048, 0.12))
-        points.push(new THREE.Vector2(0.048, 0.35))
+        points.push(new THREE.Vector2(0.04, 0.02))
+        points.push(new THREE.Vector2(0.05, 0.05))
+        // メインボディ前半（外筒ハブ幅に合わせる）
+        points.push(new THREE.Vector2(0.06, 0.12))
+        points.push(new THREE.Vector2(0.065, 0.2))
+        points.push(new THREE.Vector2(0.065, 0.35))
         // 段差（指掛け部）
-        points.push(new THREE.Vector2(0.044, 0.38))
-        points.push(new THREE.Vector2(0.04, 0.42))
-        // フラッシュバックチャンバー
-        points.push(new THREE.Vector2(0.042, 0.48))
-        points.push(new THREE.Vector2(0.042, 1.1))
+        points.push(new THREE.Vector2(0.06, 0.38))
+        points.push(new THREE.Vector2(0.055, 0.42))
+        // フラッシュバックチャンバー（太め）
+        points.push(new THREE.Vector2(0.06, 0.48))
+        points.push(new THREE.Vector2(0.06, 1.1))
         // チャンバー→後端遷移
-        points.push(new THREE.Vector2(0.038, 1.15))
-        points.push(new THREE.Vector2(0.04, 1.2))
+        points.push(new THREE.Vector2(0.055, 1.15))
+        points.push(new THREE.Vector2(0.058, 1.2))
         // 後端膨らみ
-        points.push(new THREE.Vector2(0.05, 1.3))
-        points.push(new THREE.Vector2(0.055, 1.5))
-        // 後端ボディ
-        points.push(new THREE.Vector2(0.055, 1.8))
+        points.push(new THREE.Vector2(0.065, 1.3))
+        // 後端ボディ（外筒ハブ幅と同じ）
+        points.push(new THREE.Vector2(0.065, 1.8))
         // 後端テーパー
-        points.push(new THREE.Vector2(0.048, 1.85))
-        points.push(new THREE.Vector2(0.04, 1.9))
+        points.push(new THREE.Vector2(0.055, 1.85))
+        points.push(new THREE.Vector2(0.045, 1.9))
         // 閉じ
         points.push(new THREE.Vector2(0, 1.9))
         return new THREE.LatheGeometry(points, 24)
@@ -76,22 +76,17 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
         points.push(new THREE.Vector2(0.024, 0.02))
         // チューブ均一部分
         points.push(new THREE.Vector2(0.025, 0.05))
-        points.push(new THREE.Vector2(0.025, 2.2))
+        points.push(new THREE.Vector2(0.025, 2.1))
         // テーパー遷移（チューブ→ハブ）
-        points.push(new THREE.Vector2(0.03, 2.25))
-        points.push(new THREE.Vector2(0.045, 2.35))
+        points.push(new THREE.Vector2(0.03, 2.15))
+        points.push(new THREE.Vector2(0.045, 2.25))
         // ハブメインボディ
-        points.push(new THREE.Vector2(0.06, 2.45))
-        points.push(new THREE.Vector2(0.065, 2.5))
-        points.push(new THREE.Vector2(0.065, 2.85))
-        // グリップ段差
-        points.push(new THREE.Vector2(0.055, 2.9))
-        // ルアーロック接続部
-        points.push(new THREE.Vector2(0.045, 2.95))
-        points.push(new THREE.Vector2(0.04, 3.05))
-        points.push(new THREE.Vector2(0.04, 3.15))
+        points.push(new THREE.Vector2(0.06, 2.35))
+        points.push(new THREE.Vector2(0.065, 2.4))
+        // ハブ幅を最後まで一定に維持
+        points.push(new THREE.Vector2(0.065, 3.2))
         // 閉じ
-        points.push(new THREE.Vector2(0, 3.15))
+        points.push(new THREE.Vector2(0, 3.2))
         return new THREE.LatheGeometry(points, 24)
     }, [])
 
@@ -137,7 +132,7 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
 
             {/* === 外筒（カテーテル+ハブ一体型） === */}
             <group position={[0, outerOffset, 0]}>
-                <mesh geometry={outerGeometry} material={outerMaterial} />
+                <mesh geometry={outerGeometry} material={outerMaterial} position={[0, 0.15, 0]} />
             </group>
         </group>
     )
