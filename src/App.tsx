@@ -17,10 +17,9 @@ function CameraController({ zoom }: { zoom: number }) {
     const { camera } = useThree()
 
     useFrame(() => {
-        // 断面図視点（腕の横から見る）をベースにズーム適用
-        const basePos = new THREE.Vector3(4, 0.5, 2)
-        const target = new THREE.Vector3(0, -0.8, 0.5)
-        // ズームでカメラを近づける/遠ざける
+        // 断面図視点：腕の端から見る（X軸方向からの視点）
+        const basePos = new THREE.Vector3(7, 0.3, 1.2)
+        const target = new THREE.Vector3(0, -0.8, 0.2)
         const direction = basePos.clone().sub(target).normalize()
         const distance = basePos.distanceTo(target) * zoom
         const pos = target.clone().add(direction.multiplyScalar(distance))
@@ -58,7 +57,7 @@ function SimulatorScene({
         // 腕ワールド座標での静脈位置
         // Arm group: position=[0,-0.8,0], rotation=[0,0,PI/2]
         // 穿刺ガイド local (0.02, 0, 0.63) → world (0, -0.78, 0.63)
-        const veinWorldApprox = new THREE.Vector3(0.0, -0.78, 0.55)
+        const veinWorldApprox = new THREE.Vector3(0.0, -0.78, 0.30)
         const dist = tipWorld.distanceTo(veinWorldApprox)
         if (dist < 0.5) {
             onPuncture()
