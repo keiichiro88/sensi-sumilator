@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import Needle from './components/Needle'
@@ -14,6 +14,15 @@ const DEFAULT_NEEDLE_ANGLE_DEG = 15
 /**
  * 3Dシーン
  */
+/**
+ * カメラ参照を外部に渡すヘルパー
+ */
+function CameraCapture({ cameraRef }: { cameraRef: React.MutableRefObject<THREE.Camera | null> }) {
+    const { camera } = useThree()
+    cameraRef.current = camera
+    return null
+}
+
 function SimulatorScene({
     needlePos,
     needleRot,
@@ -21,6 +30,7 @@ function SimulatorScene({
     outerOffset,
     phase,
     mode,
+    cameraRef,
     onPuncture,
 }: {
     needlePos: THREE.Vector3
@@ -29,6 +39,7 @@ function SimulatorScene({
     outerOffset: number
     phase: Phase
     mode: Mode
+    cameraRef: React.MutableRefObject<THREE.Camera | null>
     onPuncture: () => void
 }) {
     useFrame(() => {
@@ -43,6 +54,8 @@ function SimulatorScene({
 
     return (
         <>
+            <CameraCapture cameraRef={cameraRef} />
+
             {/* カメラモード時のみOrbitControls有効 */}
             <OrbitControls
                 target={[0, -0.8, 0.2]}
@@ -189,6 +202,7 @@ function App() {
     }, [needleAngle])
 
     // ドラッグ管理
+    const cameraRef = useRef<THREE.Camera | null>(null)
     const isDragging = useRef(false)
     const lastPointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
     const isOverUI = useRef(false)
@@ -205,16 +219,31 @@ function App() {
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
         if (!isDragging.current || mode !== 'needle' || phase !== 'pre-puncture') return
 
-        const dx = (e.clientX - lastPointer.current.x) * 0.01
-        const dy = (e.clientY - lastPointer.current.y) * 0.01
+        const dx = e.clientX - lastPointer.current.x
+        const dy = e.clientY - lastPointer.current.y
         lastPointer.current = { x: e.clientX, y: e.clientY }
 
+        const camera = cameraRef.current
+        if (!camera) return
+
+        // カメラのright/upベクトルを取得（ワールド空間）
+        // これにより画面上のドラッグ方向が3D空間で正しい方向にマッピングされる
+        const right = new THREE.Vector3()
+        const up = new THREE.Vector3()
+        const back = new THREE.Vector3()
+        camera.matrixWorld.extractBasis(right, up, back)
+
+        const sensitivity = 0.01
         setNeedlePos((prev) => {
             const newPos = prev.clone()
-            newPos.x += dx
-            newPos.y -= dy
+            // 画面右ドラッグ → カメラのrightベクトル方向に移動
+            newPos.addScaledVector(right, dx * sensitivity)
+            // 画面上ドラッグ → カメラのupベクトル方向に移動（screen Yは反転）
+            newPos.addScaledVector(up, -dy * sensitivity)
+            // 範囲制限
             newPos.x = Math.max(-5, Math.min(5, newPos.x))
             newPos.y = Math.max(-1.5, Math.min(4, newPos.y))
+            newPos.z = Math.max(-0.5, Math.min(3.0, newPos.z))
             return newPos
         })
     }, [mode, phase])
@@ -389,6 +418,7 @@ function App() {
                         outerOffset={outerOffset}
                         phase={phase}
                         mode={mode}
+                        cameraRef={cameraRef}
                         onPuncture={handlePuncture}
                     />
                 </Canvas>
