@@ -1,35 +1,15 @@
 import React, { useState, useCallback, useRef } from 'react'
-import { Canvas, useThree, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import Needle from './components/Needle'
 import Arm from './components/Arm'
 import SliderControls from './components/SliderControls'
 
 type Phase = 'pre-puncture' | 'punctured' | 'advancing' | 'completed'
+type Mode = 'camera' | 'needle'
 
-// デフォルトの穿刺角度（30度）
 const DEFAULT_NEEDLE_ANGLE_DEG = 15
-
-/**
- * カメラコントローラー：断面図視点固定＋ズーム対応
- */
-function CameraController({ zoom }: { zoom: number }) {
-    const { camera } = useThree()
-
-    useFrame(() => {
-        // 断面図視点：腕の端から見る（X軸方向からの視点）
-        const basePos = new THREE.Vector3(7, 0.3, 1.2)
-        const target = new THREE.Vector3(0, -0.8, 0.2)
-        const direction = basePos.clone().sub(target).normalize()
-        const distance = basePos.distanceTo(target) * zoom
-        const pos = target.clone().add(direction.multiplyScalar(distance))
-        camera.position.lerp(pos, 0.1)
-        camera.lookAt(target)
-        camera.updateProjectionMatrix()
-    })
-
-    return null
-}
 
 /**
  * 3Dシーン
@@ -40,7 +20,7 @@ function SimulatorScene({
     innerOffset,
     outerOffset,
     phase,
-    zoom,
+    mode,
     onPuncture,
 }: {
     needlePos: THREE.Vector3
@@ -48,15 +28,12 @@ function SimulatorScene({
     innerOffset: number
     outerOffset: number
     phase: Phase
-    zoom: number
+    mode: Mode
     onPuncture: () => void
 }) {
     useFrame(() => {
         if (phase !== 'pre-puncture') return
         const tipWorld = needlePos.clone()
-        // 腕ワールド座標での静脈位置
-        // Arm group: position=[0,-0.8,0], rotation=[0,0,PI/2]
-        // 穿刺ガイド local (0.02, 0, 0.63) → world (0, -0.78, 0.63)
         const veinWorldApprox = new THREE.Vector3(0.0, -0.78, 0.30)
         const dist = tipWorld.distanceTo(veinWorldApprox)
         if (dist < 0.5) {
@@ -66,7 +43,13 @@ function SimulatorScene({
 
     return (
         <>
-            <CameraController zoom={zoom} />
+            {/* カメラモード時のみOrbitControls有効 */}
+            <OrbitControls
+                target={[0, -0.8, 0.2]}
+                enableDamping
+                dampingFactor={0.1}
+                enabled={mode === 'camera'}
+            />
 
             {/* ライティング */}
             <ambientLight intensity={0.3} />
@@ -86,12 +69,7 @@ function SimulatorScene({
             {/* 腕モデル */}
             <Arm phase={phase} />
 
-            {/* 留置針モデル
-        針の構造：
-        - 先端（鋭利な金属）= Y=0（モデル原点）→ 穿刺方向の先頭
-        - 柄（ハブ・ウイング）= Y=3.3+（モデル上部）→ 術者が持つ側
-        穿刺方向：左→右（先端が右を向き、柄が左側に来る）
-      */}
+            {/* 留置針モデル */}
             <Needle
                 innerOffset={innerOffset}
                 outerOffset={outerOffset}
@@ -105,8 +83,91 @@ function SimulatorScene({
                 <planeGeometry args={[24, 24]} />
                 <meshStandardMaterial color="#d5e0d8" roughness={0.95} metalness={0.0} />
             </mesh>
-
         </>
+    )
+}
+
+/**
+ * 2Dクロスセクション・ミニマップ
+ * 腕の断面図に血管と針の位置を表示
+ */
+function CrossSectionMinimap({ needleZ, needleY }: { needleZ: number; needleY: number }) {
+    const size = 130
+    const cx = size / 2
+    const cy = size / 2
+    const armRx = 48  // 腕楕円の横幅
+    const armRy = 32  // 腕楕円の縦幅
+
+    // 血管のワールドZ=0.30 → ミニマップ座標
+    // Z座標: 0=腕の中心, 正=上面(カメラ手前), ミニマップでは上
+    // 腕の表面Z≈0.59(center), 血管Z=0.30
+    const veinFraction = 0.30 / 0.59  // 血管の腕内相対位置
+    const veinMapX = cx + 3
+    const veinMapY = cy - armRy * veinFraction * 0.7
+
+    // 針のZ位置をミニマップ座標にマッピング
+    // Z: -0.5~3.0 → 腕の外から腕の下まで
+    // 腕の上面≈0.59, 下面≈-0.59
+    const needleZNorm = (needleZ - (-0.5)) / 3.5  // 0~1に正規化
+    const needleMapY = cy + armRy + 10 - needleZNorm * (armRy * 2 + 20)
+
+    // 針のY位置（高さ）→ ミニマップでは左右にマッピング
+    // Y: -1.5~4.0 → ミニマップ横方向
+    const needleYNorm = (needleY - (-1.5)) / 5.5
+    const needleMapX = cx - armRx + needleYNorm * armRx * 2
+
+    return (
+        <div className="absolute bottom-24 right-3 z-20 pointer-events-none">
+            <div className="bg-black/60 backdrop-blur-md rounded-xl border border-white/15 p-2">
+                <div className="text-[8px] text-white/40 text-center mb-1 tracking-wider">断面図</div>
+                <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                    {/* 背景グリッド */}
+                    <line x1={cx} y1={4} x2={cx} y2={size - 4} stroke="rgba(255,255,255,0.05)" strokeWidth={0.5} />
+                    <line x1={4} y1={cy} x2={size - 4} y2={cy} stroke="rgba(255,255,255,0.05)" strokeWidth={0.5} />
+
+                    {/* 腕の断面（楕円） */}
+                    <ellipse
+                        cx={cx} cy={cy} rx={armRx} ry={armRy}
+                        fill="rgba(240,188,138,0.25)"
+                        stroke="rgba(240,188,138,0.5)"
+                        strokeWidth={1.5}
+                    />
+
+                    {/* 皮下組織のリング */}
+                    <ellipse
+                        cx={cx} cy={cy} rx={armRx - 4} ry={armRy - 3}
+                        fill="none"
+                        stroke="rgba(240,188,138,0.15)"
+                        strokeWidth={0.5}
+                        strokeDasharray="3 3"
+                    />
+
+                    {/* 血管 */}
+                    <circle
+                        cx={veinMapX} cy={veinMapY} r={5}
+                        fill="rgba(204,34,34,0.7)"
+                        stroke="#cc2222"
+                        strokeWidth={1}
+                    />
+                    <text x={veinMapX + 9} y={veinMapY + 3} fill="rgba(204,34,34,0.6)" fontSize={7}>静脈</text>
+
+                    {/* 針位置マーカー */}
+                    <circle
+                        cx={needleMapX} cy={needleMapY} r={4}
+                        fill="rgba(102,255,170,0.6)"
+                        stroke="#66ffaa"
+                        strokeWidth={1.5}
+                    />
+                    {/* 針の十字線 */}
+                    <line x1={needleMapX - 7} y1={needleMapY} x2={needleMapX + 7} y2={needleMapY} stroke="#66ffaa" strokeWidth={0.5} opacity={0.5} />
+                    <line x1={needleMapX} y1={needleMapY - 7} x2={needleMapX} y2={needleMapY + 7} stroke="#66ffaa" strokeWidth={0.5} opacity={0.5} />
+
+                    {/* ラベル */}
+                    <text x={4} y={12} fill="rgba(255,255,255,0.3)" fontSize={7}>上</text>
+                    <text x={4} y={size - 5} fill="rgba(255,255,255,0.3)" fontSize={7}>下</text>
+                </svg>
+            </div>
+        </div>
     )
 }
 
@@ -115,41 +176,34 @@ function SimulatorScene({
  */
 function App() {
     const [phase, setPhase] = useState<Phase>('pre-puncture')
+    const [mode, setMode] = useState<Mode>('camera')
     const [innerOffset, setInnerOffset] = useState(0)
     const [outerOffset, setOuterOffset] = useState(0)
-    const [zoom, setZoom] = useState(1.0)
     const [needleAngle, setNeedleAngle] = useState(DEFAULT_NEEDLE_ANGLE_DEG)
-    // 針の初期位置（左上から開始、右方向へ穿刺）
-    // 腕は横向き（X軸方向）、右=拳（末梢）、左=肩（中枢）
     const [needlePos, setNeedlePos] = useState(new THREE.Vector3(1.5, 1.2, 1.5))
 
     // 針の回転を角度から計算
-    // 針モデル: Y方向がシャフト方向（先端=Y:0→柄=Y:3.3+）
-    // 穿刺方向: 右→左（-X方向）で、皮膚に対して角度をつけて下向きに入る
-    // Z軸を-PI/2回転 → Y軸が-X方向を向く（先端が左を向く）
-    // さらにangleRad分だけ回転させて穿刺角度をつける
     const needleRot = React.useMemo(() => {
         const angleRad = (needleAngle * Math.PI) / 180
-        // -PI/2で先端を左(-X)に向け、+angleRadで先端を下方向に傾ける
         return new THREE.Euler(0, 0, -(Math.PI / 2) + angleRad)
     }, [needleAngle])
 
     // ドラッグ管理
     const isDragging = useRef(false)
     const lastPointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
-    const isOverUI = useRef(false) // UIエリア上かどうか
+    const isOverUI = useRef(false)
 
-    // --- タッチ・マウスドラッグ（穿刺前） ---
+    // --- タッチ・マウスドラッグ（穿刺モード時のみ） ---
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
-        if (phase !== 'pre-puncture') return
-        if (isOverUI.current) return // UIパネル上ならドラッグしない
+        if (mode !== 'needle' || phase !== 'pre-puncture') return
+        if (isOverUI.current) return
         isDragging.current = true
         lastPointer.current = { x: e.clientX, y: e.clientY }
             ; (e.target as HTMLElement).setPointerCapture(e.pointerId)
-    }, [phase])
+    }, [mode, phase])
 
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
-        if (!isDragging.current || phase !== 'pre-puncture') return
+        if (!isDragging.current || mode !== 'needle' || phase !== 'pre-puncture') return
 
         const dx = (e.clientX - lastPointer.current.x) * 0.01
         const dy = (e.clientY - lastPointer.current.y) * 0.01
@@ -163,50 +217,23 @@ function App() {
             newPos.y = Math.max(-1.5, Math.min(4, newPos.y))
             return newPos
         })
-    }, [phase])
+    }, [mode, phase])
 
     const handlePointerUp = useCallback(() => {
         isDragging.current = false
     }, [])
 
-    // --- 奥行き調整 ---
-    const adjustDepth = useCallback((delta: number) => {
+    // --- ホイール：穿刺モードでは奥行き調整、カメラモードはOrbitControlsが処理 ---
+    const handleWheel = useCallback((e: React.WheelEvent) => {
+        if (mode !== 'needle') return
+        e.preventDefault()
+        const delta = e.deltaY * -0.002
         setNeedlePos((prev) => {
             const p = prev.clone()
             p.z = Math.max(-0.5, Math.min(3.0, p.z + delta))
             return p
         })
-    }, [])
-
-    // --- マウスホイールでカメラズーム ---
-    const handleWheel = useCallback((e: React.WheelEvent) => {
-        setZoom((prev) => Math.max(0.3, Math.min(2.5, prev + e.deltaY * 0.001)))
-    }, [])
-
-    // --- ピンチズーム（タッチ） ---
-    const pinchDistance = useRef<number | null>(null)
-    const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        if (e.touches.length === 2) {
-            const dx = e.touches[0].clientX - e.touches[1].clientX
-            const dy = e.touches[0].clientY - e.touches[1].clientY
-            pinchDistance.current = Math.sqrt(dx * dx + dy * dy)
-        }
-    }, [])
-
-    const handleTouchMove = useCallback((e: React.TouchEvent) => {
-        if (e.touches.length === 2 && pinchDistance.current !== null) {
-            const dx = e.touches[0].clientX - e.touches[1].clientX
-            const dy = e.touches[0].clientY - e.touches[1].clientY
-            const newDist = Math.sqrt(dx * dx + dy * dy)
-            const delta = (pinchDistance.current - newDist) * 0.005
-            pinchDistance.current = newDist
-            setZoom((prev) => Math.max(0.3, Math.min(2.5, prev + delta)))
-        }
-    }, [])
-
-    const handleTouchEnd = useCallback(() => {
-        pinchDistance.current = null
-    }, [])
+    }, [mode])
 
     // --- 穿刺判定 ---
     const handlePuncture = useCallback(() => {
@@ -233,11 +260,11 @@ function App() {
     // --- リセット ---
     const handleReset = useCallback(() => {
         setPhase('pre-puncture')
+        setMode('camera')
         setInnerOffset(0)
         setOuterOffset(0)
         setNeedlePos(new THREE.Vector3(1.5, 1.2, 1.5))
         setNeedleAngle(DEFAULT_NEEDLE_ANGLE_DEG)
-        setZoom(1.0)
     }, [])
 
     return (
@@ -265,7 +292,12 @@ function App() {
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
                                 </svg>
                             </div>
-                            <span className="text-white/60 text-xs">ドラッグで針を移動 ・ 右パネルで奥行き調整 ・ ホイール/ピンチでズーム</span>
+                            <span className="text-white/60 text-xs">
+                                {mode === 'camera'
+                                    ? 'ドラッグで回転 ・ ホイールでズーム ・ アングルを決めて穿刺モードへ'
+                                    : 'ドラッグで針を移動 ・ ホイールで奥行き調整 ・ 右下の断面図で位置確認'
+                                }
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -277,86 +309,53 @@ function App() {
                 onPointerEnter={() => { isOverUI.current = true }}
                 onPointerLeave={() => { isOverUI.current = false }}
             >
-                {/* 針角度コントロール */}
-                <div className="flex flex-col items-center gap-1 bg-black/50 backdrop-blur-md rounded-2xl px-3 py-3 border border-white/10 pointer-events-auto">
-                    <span className="text-[9px] text-white/50 font-medium tracking-wider mb-1">穿刺角度</span>
-
-                    {/* 角度を上げるボタン */}
+                {/* モード切替ボタン */}
+                <div className="flex flex-col items-center gap-1 bg-black/50 backdrop-blur-md rounded-2xl px-2 py-2 border border-white/10 pointer-events-auto">
                     <button
-                        onClick={(e) => { e.stopPropagation(); setNeedleAngle((a) => Math.min(45, a + 5)) }}
-                        className="w-8 h-8 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 flex items-center justify-center transition-colors active:scale-90 border border-yellow-500/20"
+                        onClick={() => setMode('camera')}
+                        className={`w-14 py-1.5 rounded-xl text-[10px] font-medium transition-all ${mode === 'camera'
+                            ? 'bg-blue-500/40 text-blue-200 border border-blue-400/40 shadow-lg shadow-blue-500/10'
+                            : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'
+                            }`}
                     >
-                        <svg className="w-4 h-4 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                        </svg>
+                        カメラ
                     </button>
+                    <button
+                        onClick={() => setMode('needle')}
+                        className={`w-14 py-1.5 rounded-xl text-[10px] font-medium transition-all ${mode === 'needle'
+                            ? 'bg-emerald-500/40 text-emerald-200 border border-emerald-400/40 shadow-lg shadow-emerald-500/10'
+                            : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'
+                            }`}
+                    >
+                        穿刺
+                    </button>
+                </div>
 
-                    {/* 現在の角度表示 */}
-                    <div className="my-1 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                        <span className="text-sm text-yellow-300 font-mono font-bold">{needleAngle}°</span>
+                {/* 針角度コントロール（穿刺モード時のみ） */}
+                {mode === 'needle' && phase === 'pre-puncture' && (
+                    <div className="flex flex-col items-center gap-1 bg-black/50 backdrop-blur-md rounded-2xl px-3 py-3 border border-white/10 pointer-events-auto">
+                        <span className="text-[9px] text-white/50 font-medium tracking-wider mb-1">穿刺角度</span>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setNeedleAngle((a) => Math.min(45, a + 5)) }}
+                            className="w-8 h-8 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 flex items-center justify-center transition-colors active:scale-90 border border-yellow-500/20"
+                        >
+                            <svg className="w-4 h-4 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                            </svg>
+                        </button>
+                        <div className="my-1 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                            <span className="text-sm text-yellow-300 font-mono font-bold">{needleAngle}°</span>
+                        </div>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setNeedleAngle((a) => Math.max(5, a - 5)) }}
+                            className="w-8 h-8 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 flex items-center justify-center transition-colors active:scale-90 border border-yellow-500/20"
+                        >
+                            <svg className="w-4 h-4 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
                     </div>
-
-                    {/* 角度を下げるボタン */}
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setNeedleAngle((a) => Math.max(5, a - 5)) }}
-                        className="w-8 h-8 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 flex items-center justify-center transition-colors active:scale-90 border border-yellow-500/20"
-                    >
-                        <svg className="w-4 h-4 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </button>
-                </div>
-
-                {/* 奥行きコントロール（Z軸：腕に近づける/離す） */}
-                <div className="flex flex-col items-center gap-1 bg-black/50 backdrop-blur-md rounded-2xl px-3 py-3 border border-white/10 pointer-events-auto">
-                    <span className="text-[9px] text-white/50 font-medium tracking-wider mb-1">奥行き</span>
-
-                    {/* 手前に（腕から離す：Z+） */}
-                    <button
-                        onClick={(e) => { e.stopPropagation(); adjustDepth(0.1) }}
-                        className="w-8 h-8 rounded-full bg-teal-500/20 hover:bg-teal-500/30 flex items-center justify-center transition-colors active:scale-90 border border-teal-500/20"
-                    >
-                        <svg className="w-4 h-4 text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                        </svg>
-                    </button>
-
-                    {/* 現在の奥行き表示 */}
-                    <div className="my-1 px-2 py-1 rounded-lg bg-teal-500/10 border border-teal-500/30">
-                        <span className="text-[10px] text-teal-300 font-mono font-bold">{needlePos.z.toFixed(1)}</span>
-                    </div>
-
-                    {/* 奥に（腕に近づける：Z-） */}
-                    <button
-                        onClick={(e) => { e.stopPropagation(); adjustDepth(-0.1) }}
-                        className="w-8 h-8 rounded-full bg-teal-500/20 hover:bg-teal-500/30 flex items-center justify-center transition-colors active:scale-90 border border-teal-500/20"
-                    >
-                        <svg className="w-4 h-4 text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </button>
-                </div>
-
-                {/* ズームコントロール */}
-                <div className="flex flex-col items-center gap-1 bg-black/50 backdrop-blur-md rounded-2xl px-3 py-2.5 border border-white/10 pointer-events-auto">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setZoom((z) => Math.max(0.3, z - 0.15)) }}
-                        className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors active:scale-90"
-                    >
-                        <svg className="w-4 h-4 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197M15.803 15.803A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6M7.5 10.5h6" />
-                        </svg>
-                    </button>
-                    <span className="text-[9px] text-white/40 my-0.5">ズーム</span>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setZoom((z) => Math.min(2.5, z + 0.15)) }}
-                        className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors active:scale-90"
-                    >
-                        <svg className="w-4 h-4 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197M15.803 15.803A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM7.5 10.5h6" />
-                        </svg>
-                    </button>
-                </div>
+                )}
             </div>
 
             {/* ===== 3Dキャンバス ===== */}
@@ -367,9 +366,6 @@ function App() {
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerUp}
                 onWheel={handleWheel}
-                onTouchStart={handleTouchStart as unknown as React.TouchEventHandler}
-                onTouchMove={handleTouchMove as unknown as React.TouchEventHandler}
-                onTouchEnd={handleTouchEnd}
             >
                 <Canvas
                     shadows
@@ -377,7 +373,7 @@ function App() {
                         fov: 45,
                         near: 0.05,
                         far: 100,
-                        position: [0, 2.5, 5],
+                        position: [7, 0.3, 1.2],
                     }}
                     gl={{
                         antialias: true,
@@ -392,11 +388,16 @@ function App() {
                         innerOffset={innerOffset}
                         outerOffset={outerOffset}
                         phase={phase}
-                        zoom={zoom}
+                        mode={mode}
                         onPuncture={handlePuncture}
                     />
                 </Canvas>
             </div>
+
+            {/* ===== 2Dクロスセクション・ミニマップ（穿刺モード時） ===== */}
+            {mode === 'needle' && phase === 'pre-puncture' && (
+                <CrossSectionMinimap needleZ={needlePos.z} needleY={needlePos.y} />
+            )}
 
             {/* ===== スライダーUI（穿刺後） ===== */}
             <SliderControls
