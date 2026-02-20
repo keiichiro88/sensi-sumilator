@@ -3,7 +3,7 @@ import * as THREE from 'three'
 
 interface NeedleProps {
     innerOffset: number   // 内筒のオフセット（0=完全に挿入、負の値=引き抜き方向）
-    outerOffset: number   // 外筒のオフセット（0=初期位置、正の値=前進方向）
+    outerOffset: number   // 外筒のオフセット（0=初期位置、正の値=前進方向＝先端方向）
     position: [number, number, number]
     rotation: [number, number, number]
     showFlashback: boolean // フラッシュバック（逆血）の表示
@@ -123,7 +123,8 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
     return (
         <group ref={groupRef} position={position} rotation={rotation}>
             {/* === 内筒グループ（金属針 + 内筒ハブ） === */}
-            <group position={[0, innerOffset, 0]}>
+            {/* 正のローカルY=ハブ方向（引き抜き）、offsetを反転してマッピング */}
+            <group position={[0, -innerOffset, 0]}>
                 {/* 金属針シャフト */}
                 <mesh geometry={innerNeedleGeometry} material={metalMaterial} castShadow />
                 {/* 内筒ハブ（フラッシュバックチャンバー付き） */}
@@ -131,7 +132,8 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
             </group>
 
             {/* === 外筒（カテーテル+ハブ一体型） === */}
-            <group position={[0, outerOffset, 0]}>
+            {/* 負のローカルY=先端方向（前進）、offsetを反転してマッピング */}
+            <group position={[0, -outerOffset, 0]}>
                 <mesh geometry={outerGeometry} material={outerMaterial} position={[0, 0.15, 0]} />
             </group>
         </group>

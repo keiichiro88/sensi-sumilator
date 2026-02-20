@@ -10,7 +10,7 @@ interface SliderControlsProps {
 
 /**
  * 穿刺後に表示されるスライダーUI
- * 内筒と外筒をそれぞれ独立に操作可能
+ * 手順: 1.外筒を前進 → 2.内筒を引き抜き
  */
 export default function SliderControls({
     phase,
@@ -32,13 +32,13 @@ export default function SliderControls({
                     {phase === 'punctured' && (
                         <div className="inline-flex items-center gap-2 bg-red-500/20 border border-red-400/40 rounded-full px-4 py-1.5 backdrop-blur-sm">
                             <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></span>
-                            <span className="text-red-300 text-sm font-medium">逆血確認 - フラッシュバック</span>
+                            <span className="text-red-300 text-sm font-medium">逆血確認 — 外筒を進めてください</span>
                         </div>
                     )}
                     {phase === 'advancing' && (
                         <div className="inline-flex items-center gap-2 bg-blue-500/20 border border-blue-400/40 rounded-full px-4 py-1.5 backdrop-blur-sm">
                             <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></span>
-                            <span className="text-blue-300 text-sm font-medium">外筒を進めてください</span>
+                            <span className="text-blue-300 text-sm font-medium">内筒を引き抜いてください</span>
                         </div>
                     )}
                     {phase === 'completed' && (
@@ -51,41 +51,8 @@ export default function SliderControls({
 
                 {/* スライダーコントロール */}
                 <div className="max-w-md mx-auto space-y-4">
-                    {/* 内筒スライダー */}
-                    <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-20">
-                            <span className="text-xs text-gray-300 font-medium block">内筒</span>
-                            <span className="text-[10px] text-gray-500">（金属針）</span>
-                        </div>
-                        <div className="flex-1 relative">
-                            <input
-                                type="range"
-                                min={-3.5}
-                                max={0}
-                                step={0.01}
-                                value={innerOffset}
-                                onChange={(e) => onInnerChange(parseFloat(e.target.value))}
-                                className="w-full h-2 rounded-full appearance-none cursor-pointer
-                  bg-gradient-to-r from-gray-600 to-gray-400
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:w-5
-                  [&::-webkit-slider-thumb]:h-5
-                  [&::-webkit-slider-thumb]:rounded-full
-                  [&::-webkit-slider-thumb]:bg-white
-                  [&::-webkit-slider-thumb]:shadow-lg
-                  [&::-webkit-slider-thumb]:border-2
-                  [&::-webkit-slider-thumb]:border-gray-300
-                  [&::-webkit-slider-thumb]:cursor-pointer"
-                                disabled={phase === 'completed'}
-                            />
-                        </div>
-                        <div className="flex-shrink-0 w-10 text-right">
-                            <span className="text-xs text-gray-400 font-mono">{Math.abs(innerOffset).toFixed(1)}</span>
-                        </div>
-                    </div>
-
-                    {/* 外筒スライダー */}
-                    <div className="flex items-center gap-3">
+                    {/* ① 外筒スライダー（まず外筒を前進させる） */}
+                    <div className={`flex items-center gap-3 transition-opacity ${phase === 'advancing' || phase === 'completed' ? 'opacity-40' : ''}`}>
                         <div className="flex-shrink-0 w-20">
                             <span className="text-xs text-blue-300 font-medium block">外筒</span>
                             <span className="text-[10px] text-blue-500/70">（カテーテル）</span>
@@ -110,11 +77,45 @@ export default function SliderControls({
                   [&::-webkit-slider-thumb]:border-2
                   [&::-webkit-slider-thumb]:border-blue-200
                   [&::-webkit-slider-thumb]:cursor-pointer"
-                                disabled={phase === 'completed'}
+                                disabled={phase === 'advancing' || phase === 'completed'}
                             />
                         </div>
-                        <div className="flex-shrink-0 w-10 text-right">
-                            <span className="text-xs text-blue-400 font-mono">{outerOffset.toFixed(1)}</span>
+                        <div className="flex-shrink-0 w-12 text-right">
+                            <span className="text-xs text-blue-400 font-mono">→{outerOffset.toFixed(1)}</span>
+                        </div>
+                    </div>
+
+                    {/* ② 内筒スライダー（外筒前進後に引き抜く） */}
+                    {/* デフォルト: 右端(0)=挿入状態、左にスライド(-3.5)=引き抜き */}
+                    <div className={`flex items-center gap-3 transition-opacity ${phase === 'punctured' || phase === 'completed' ? 'opacity-40' : ''}`}>
+                        <div className="flex-shrink-0 w-20">
+                            <span className="text-xs text-gray-300 font-medium block">内筒</span>
+                            <span className="text-[10px] text-gray-500">（金属針）</span>
+                        </div>
+                        <div className="flex-1 relative">
+                            <input
+                                type="range"
+                                min={-3.5}
+                                max={0}
+                                step={0.01}
+                                value={innerOffset}
+                                onChange={(e) => onInnerChange(parseFloat(e.target.value))}
+                                className="w-full h-2 rounded-full appearance-none cursor-pointer
+                  bg-gradient-to-r from-gray-600 to-gray-400
+                  [&::-webkit-slider-thumb]:appearance-none
+                  [&::-webkit-slider-thumb]:w-5
+                  [&::-webkit-slider-thumb]:h-5
+                  [&::-webkit-slider-thumb]:rounded-full
+                  [&::-webkit-slider-thumb]:bg-white
+                  [&::-webkit-slider-thumb]:shadow-lg
+                  [&::-webkit-slider-thumb]:border-2
+                  [&::-webkit-slider-thumb]:border-gray-300
+                  [&::-webkit-slider-thumb]:cursor-pointer"
+                                disabled={phase === 'punctured' || phase === 'completed'}
+                            />
+                        </div>
+                        <div className="flex-shrink-0 w-12 text-right">
+                            <span className="text-xs text-gray-400 font-mono">←{Math.abs(innerOffset).toFixed(1)}</span>
                         </div>
                     </div>
                 </div>

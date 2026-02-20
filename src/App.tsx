@@ -358,19 +358,20 @@ function App() {
     }, [phase])
 
     // --- スライダー操作 ---
-    const handleInnerChange = useCallback((value: number) => {
-        setInnerOffset(value)
-        if (value < -0.5 && phase === 'punctured') {
-            setPhase('advancing')
+    // 手順: 穿刺後 → 1.外筒を前進 → 2.内筒を引き抜き → 完了
+    const handleOuterChange = useCallback((value: number) => {
+        setOuterOffset(value)
+        if (value > 1.0 && phase === 'punctured') {
+            setPhase('advancing')  // 外筒が十分前進 → 内筒引き抜きフェーズへ
         }
     }, [phase])
 
-    const handleOuterChange = useCallback((value: number) => {
-        setOuterOffset(value)
-        if (value > 1.2 && innerOffset < -2.5) {
-            setPhase('completed')
+    const handleInnerChange = useCallback((value: number) => {
+        setInnerOffset(value)
+        if (value < -2.5 && phase === 'advancing') {
+            setPhase('completed')  // 内筒が十分引き抜かれた → 完了
         }
-    }, [innerOffset])
+    }, [phase])
 
     // --- リセット ---
     const handleReset = useCallback(() => {
