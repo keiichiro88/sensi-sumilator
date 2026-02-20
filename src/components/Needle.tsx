@@ -10,8 +10,8 @@ interface NeedleProps {
 }
 
 /**
- * テルモ サーフロー型留置針の3Dモデル
- * 内筒（金属針）と外筒（カテーテル）を個別のメッシュとして構成
+ * テルモ サーフロー型留置針の3Dモデル（SVGリファレンス準拠）
+ * 内筒（金属針+ハブ）と外筒（カテーテル+ハブ一体型）を構成
  */
 export default function Needle({ innerOffset, outerOffset, position, rotation, showFlashback }: NeedleProps) {
     const groupRef = useRef<THREE.Group>(null)
@@ -19,7 +19,7 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
     // ===== 内筒（金属針）のジオメトリ =====
     const innerNeedleGeometry = useMemo(() => {
         const points: THREE.Vector2[] = []
-        // 針先端（鋭利な刃面）- 研ぎ澄まされた先端
+        // 針先端（鋭利な刃面）
         points.push(new THREE.Vector2(0, 0))
         points.push(new THREE.Vector2(0.008, 0.03))
         // 刃面斜めカット
@@ -35,55 +35,63 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
         return new THREE.LatheGeometry(points, 24)
     }, [])
 
-    // ===== 内筒ハブ（フラッシュバックチャンバー付き） =====
+    // ===== 内筒ハブ（SVG準拠：段差付き複雑形状） =====
     const innerHubGeometry = useMemo(() => {
         const points: THREE.Vector2[] = []
+        // 先端（閉じ）
         points.push(new THREE.Vector2(0, 0))
-        // 先端の接合部
-        points.push(new THREE.Vector2(0.04, 0))
-        points.push(new THREE.Vector2(0.05, 0.03))
-        // メインボディ部分
-        points.push(new THREE.Vector2(0.055, 0.08))
-        points.push(new THREE.Vector2(0.055, 0.5))
-        // グリップの段差（指で押す部分）
-        points.push(new THREE.Vector2(0.05, 0.52))
-        points.push(new THREE.Vector2(0.045, 0.55))
-        // フラッシュバックチャンバー（透明な確認窓）
-        points.push(new THREE.Vector2(0.04, 0.6))
+        // 針との接合部
+        points.push(new THREE.Vector2(0.035, 0.02))
+        points.push(new THREE.Vector2(0.04, 0.05))
+        // グリップ段差1（メインボディ前半）
+        points.push(new THREE.Vector2(0.048, 0.12))
+        points.push(new THREE.Vector2(0.048, 0.35))
+        // 段差（指掛け部）
+        points.push(new THREE.Vector2(0.044, 0.38))
+        points.push(new THREE.Vector2(0.04, 0.42))
+        // フラッシュバックチャンバー
+        points.push(new THREE.Vector2(0.042, 0.48))
+        points.push(new THREE.Vector2(0.042, 1.1))
+        // チャンバー→後端遷移
+        points.push(new THREE.Vector2(0.038, 1.15))
         points.push(new THREE.Vector2(0.04, 1.2))
-        // 後端（太めに）
-        points.push(new THREE.Vector2(0.045, 1.25))
+        // 後端膨らみ
         points.push(new THREE.Vector2(0.05, 1.3))
-        points.push(new THREE.Vector2(0, 1.3))
+        points.push(new THREE.Vector2(0.055, 1.5))
+        // 後端ボディ
+        points.push(new THREE.Vector2(0.055, 1.8))
+        // 後端テーパー
+        points.push(new THREE.Vector2(0.048, 1.85))
+        points.push(new THREE.Vector2(0.04, 1.9))
+        // 閉じ
+        points.push(new THREE.Vector2(0, 1.9))
         return new THREE.LatheGeometry(points, 24)
     }, [])
 
-    // ===== 外筒（カテーテル部分） =====
-    const outerCatheterGeometry = useMemo(() => {
-        // 2層の管状構造（中空）
-        const outerRadius = 0.025
-        const length = 2.5
-        const geo = new THREE.CylinderGeometry(outerRadius, outerRadius * 0.95, length, 24, 1, true)
-        return geo
-    }, [])
-
-    // ===== 外筒ハブ（青い持ち手部分） =====
-    const outerHubGeometry = useMemo(() => {
+    // ===== 外筒一体型（カテーテルチューブ+ハブ） =====
+    const outerGeometry = useMemo(() => {
         const points: THREE.Vector2[] = []
+        // チューブ先端（閉じ）
         points.push(new THREE.Vector2(0, 0))
-        // 先端テーパー
-        points.push(new THREE.Vector2(0.035, 0))
-        points.push(new THREE.Vector2(0.06, 0.04))
-        // メインボディ
-        points.push(new THREE.Vector2(0.065, 0.1))
-        points.push(new THREE.Vector2(0.065, 0.35))
-        // ウイング付け根
-        points.push(new THREE.Vector2(0.06, 0.38))
-        points.push(new THREE.Vector2(0.055, 0.42))
+        points.push(new THREE.Vector2(0.024, 0.02))
+        // チューブ均一部分
+        points.push(new THREE.Vector2(0.025, 0.05))
+        points.push(new THREE.Vector2(0.025, 2.2))
+        // テーパー遷移（チューブ→ハブ）
+        points.push(new THREE.Vector2(0.03, 2.25))
+        points.push(new THREE.Vector2(0.045, 2.35))
+        // ハブメインボディ
+        points.push(new THREE.Vector2(0.06, 2.45))
+        points.push(new THREE.Vector2(0.065, 2.5))
+        points.push(new THREE.Vector2(0.065, 2.85))
+        // グリップ段差
+        points.push(new THREE.Vector2(0.055, 2.9))
         // ルアーロック接続部
-        points.push(new THREE.Vector2(0.045, 0.55))
-        points.push(new THREE.Vector2(0.04, 0.6))
-        points.push(new THREE.Vector2(0, 0.6))
+        points.push(new THREE.Vector2(0.045, 2.95))
+        points.push(new THREE.Vector2(0.04, 3.05))
+        points.push(new THREE.Vector2(0.04, 3.15))
+        // 閉じ
+        points.push(new THREE.Vector2(0, 3.15))
         return new THREE.LatheGeometry(points, 24)
     }, [])
 
@@ -107,23 +115,14 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
         clearcoat: 0.5,
     }), [showFlashback])
 
-    const catheterMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-        color: 0x64b5f6,
-        transparent: true,
-        opacity: 0.55,
-        metalness: 0.0,
-        roughness: 0.5,
-        side: THREE.DoubleSide,
-        transmission: 0.2,
-    }), [])
-
-    const outerHubMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-        color: 0x42a5f5,
+    const outerMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: 0x66baff,
         metalness: 0.05,
         roughness: 0.4,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.8,
         clearcoat: 0.3,
+        side: THREE.DoubleSide,
     }), [])
 
     return (
@@ -136,12 +135,9 @@ export default function Needle({ innerOffset, outerOffset, position, rotation, s
                 <mesh geometry={innerHubGeometry} material={innerHubMaterial} position={[0, 3.3, 0]} />
             </group>
 
-            {/* === 外筒グループ（カテーテル + 外筒ハブ + ウイング） === */}
+            {/* === 外筒（カテーテル+ハブ一体型） === */}
             <group position={[0, outerOffset, 0]}>
-                {/* カテーテルチューブ */}
-                <mesh geometry={outerCatheterGeometry} material={catheterMaterial} position={[0, 1.35, 0]} />
-                {/* 外筒ハブ */}
-                <mesh geometry={outerHubGeometry} material={outerHubMaterial} position={[0, 2.60, 0]} />
+                <mesh geometry={outerGeometry} material={outerMaterial} />
             </group>
         </group>
     )
