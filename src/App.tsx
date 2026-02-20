@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import Needle from './components/Needle'
@@ -11,17 +11,29 @@ type Phase = 'pre-puncture' | 'punctured' | 'advancing' | 'completed'
 const DEFAULT_NEEDLE_ANGLE_DEG = 30
 
 /**
- * カメラコントローラー：ズーム対応
+ * カメラコントローラー：ズーム対応＋奥行き調整時の断面ビュー
  */
-function CameraController({ zoom }: { zoom: number }) {
+function CameraController({ zoom, isAdjustingDepth }: { zoom: number; isAdjustingDepth: boolean }) {
     const { camera } = useThree()
+    const targetPos = useRef(new THREE.Vector3(0, 2.5, 5))
+    const targetLookAt = useRef(new THREE.Vector3(0, -0.3, 0))
+    const currentLookAt = useRef(new THREE.Vector3(0, -0.3, 0))
 
-    useEffect(() => {
-        const distance = 5 * zoom
-        camera.position.set(0, 2.5 * zoom, distance)
-        camera.lookAt(0, -0.3, 0)
+    useFrame(() => {
+        if (isAdjustingDepth) {
+            // 奥行き調整時：腕の断面が見える横からの視点
+            targetPos.current.set(4, 0.5, 2)
+            targetLookAt.current.set(0, -0.8, 0.5)
+        } else {
+            // 通常視点
+            targetPos.current.set(0, 2.5 * zoom, 5 * zoom)
+            targetLookAt.current.set(0, -0.3, 0)
+        }
+        camera.position.lerp(targetPos.current, 0.05)
+        currentLookAt.current.lerp(targetLookAt.current, 0.05)
+        camera.lookAt(currentLookAt.current)
         camera.updateProjectionMatrix()
-    }, [camera, zoom])
+    })
 
     return null
 }
@@ -36,6 +48,7 @@ function SimulatorScene({
     outerOffset,
     phase,
     zoom,
+    isAdjustingDepth,
     onPuncture,
 }: {
     needlePos: THREE.Vector3
@@ -44,6 +57,7 @@ function SimulatorScene({
     outerOffset: number
     phase: Phase
     zoom: number
+    isAdjustingDepth: boolean
     onPuncture: () => void
 }) {
     useFrame(() => {
@@ -52,7 +66,7 @@ function SimulatorScene({
         // 腕ワールド座標での静脈位置
         // Arm group: position=[0,-0.8,0], rotation=[0,0,PI/2]
         // 穿刺ガイド local (0.02, 0, 0.63) → world (0, -0.78, 0.63)
-        const veinWorldApprox = new THREE.Vector3(0.0, -0.78, 0.63)
+        const veinWorldApprox = new THREE.Vector3(0.0, -0.78, 0.55)
         const dist = tipWorld.distanceTo(veinWorldApprox)
         if (dist < 0.5) {
             onPuncture()
@@ -61,7 +75,7 @@ function SimulatorScene({
 
     return (
         <>
-            <CameraController zoom={zoom} />
+            <CameraController zoom={zoom} isAdjustingDepth={isAdjustingDepth} />
 
             {/* ライティング */}
             <ambientLight intensity={0.3} />
@@ -101,15 +115,6 @@ function SimulatorScene({
                 <meshStandardMaterial color="#d5e0d8" roughness={0.95} metalness={0.0} />
             </mesh>
 
-            {/* 枕ロール */}
-            <mesh position={[-5, -1.6, 0]} rotation={[0, 0, Math.PI / 2]}>
-                <cylinderGeometry args={[0.3, 0.3, 2, 16]} />
-                <meshStandardMaterial color="#c0c8c4" roughness={0.8} />
-            </mesh>
-            <mesh position={[5, -1.6, 0]} rotation={[0, 0, Math.PI / 2]}>
-                <cylinderGeometry args={[0.3, 0.3, 2, 16]} />
-                <meshStandardMaterial color="#c0c8c4" roughness={0.8} />
-            </mesh>
         </>
     )
 }
@@ -123,6 +128,8 @@ function App() {
     const [outerOffset, setOuterOffset] = useState(0)
     const [zoom, setZoom] = useState(1.0)
     const [needleAngle, setNeedleAngle] = useState(DEFAULT_NEEDLE_ANGLE_DEG)
+    const [isAdjustingDepth, setIsAdjustingDepth] = useState(false)
+    const depthTimer = useRef<ReturnType<typeof setTimeout>>()
 
     // 針の初期位置（左上から開始、右方向へ穿刺）
     // 腕は横向き（X軸方向）、右=拳（末梢）、左=肩（中枢）
@@ -172,6 +179,18 @@ function App() {
 
     const handlePointerUp = useCallback(() => {
         isDragging.current = false
+    }, [])
+
+    // --- 奥行き調整（カメラ自動切替付き） ---
+    const adjustDepth = useCallback((delta: number) => {
+        setIsAdjustingDepth(true)
+        setNeedlePos((prev) => {
+            const p = prev.clone()
+            p.z = Math.max(-0.5, Math.min(3.0, p.z + delta))
+            return p
+        })
+        clearTimeout(depthTimer.current)
+        depthTimer.current = setTimeout(() => setIsAdjustingDepth(false), 800)
     }, [])
 
     // --- マウスホイールでカメラズーム ---
@@ -309,7 +328,7 @@ function App() {
 
                     {/* 手前に（腕から離す：Z+） */}
                     <button
-                        onClick={(e) => { e.stopPropagation(); setNeedlePos((prev) => { const p = prev.clone(); p.z = Math.min(3.0, p.z + 0.1); return p }) }}
+                        onClick={(e) => { e.stopPropagation(); adjustDepth(0.1) }}
                         className="w-8 h-8 rounded-full bg-teal-500/20 hover:bg-teal-500/30 flex items-center justify-center transition-colors active:scale-90 border border-teal-500/20"
                     >
                         <svg className="w-4 h-4 text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -324,7 +343,7 @@ function App() {
 
                     {/* 奥に（腕に近づける：Z-） */}
                     <button
-                        onClick={(e) => { e.stopPropagation(); setNeedlePos((prev) => { const p = prev.clone(); p.z = Math.max(-0.5, p.z - 0.1); return p }) }}
+                        onClick={(e) => { e.stopPropagation(); adjustDepth(-0.1) }}
                         className="w-8 h-8 rounded-full bg-teal-500/20 hover:bg-teal-500/30 flex items-center justify-center transition-colors active:scale-90 border border-teal-500/20"
                     >
                         <svg className="w-4 h-4 text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -389,6 +408,7 @@ function App() {
                         outerOffset={outerOffset}
                         phase={phase}
                         zoom={zoom}
+                        isAdjustingDepth={isAdjustingDepth}
                         onPuncture={handlePuncture}
                     />
                 </Canvas>

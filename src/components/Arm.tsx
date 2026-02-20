@@ -94,17 +94,18 @@ export default function Arm({ phase }: { phase: Phase }) {
 function Vein() {
     const veinGeometry = useMemo(() => {
         // 自然にカーブする静脈のパス
+        // Z値は腕表面の93%に統一（浅い皮下静脈の位置）
         const curve = new THREE.CatmullRomCurve3([
-            new THREE.Vector3(-0.15, -6, 0.55),
-            new THREE.Vector3(-0.1, -4, 0.60),
-            new THREE.Vector3(-0.05, -2, 0.63),
-            new THREE.Vector3(0.0, -0.5, 0.62),
-            new THREE.Vector3(0.02, 0, 0.60),
-            new THREE.Vector3(0.05, 0.5, 0.58),
-            new THREE.Vector3(0.1, 2, 0.55),
-            new THREE.Vector3(0.15, 3, 0.52),
-            new THREE.Vector3(0.2, 4.5, 0.48),
-            new THREE.Vector3(0.25, 6, 0.44),
+            new THREE.Vector3(-0.15, -6, 0.43),
+            new THREE.Vector3(-0.1, -4, 0.47),
+            new THREE.Vector3(-0.05, -2, 0.51),
+            new THREE.Vector3(0.0, -0.5, 0.54),
+            new THREE.Vector3(0.02, 0, 0.55),
+            new THREE.Vector3(0.05, 0.5, 0.56),
+            new THREE.Vector3(0.1, 2, 0.59),
+            new THREE.Vector3(0.15, 3, 0.61),
+            new THREE.Vector3(0.2, 4.5, 0.64),
+            new THREE.Vector3(0.25, 6, 0.66),
         ])
         return new THREE.TubeGeometry(curve, 80, 0.08, 12, false)
     }, [])
@@ -126,7 +127,7 @@ function Vein() {
  */
 function PunctureGuide() {
     return (
-        <group position={[0.02, 0, 0.63]}>
+        <group position={[0.02, 0, 0.55]}>
             <mesh rotation={[Math.PI / 2, 0, 0]}>
                 <ringGeometry args={[0.12, 0.16, 32]} />
                 <meshBasicMaterial
