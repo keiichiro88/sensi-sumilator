@@ -8,30 +8,24 @@ import SliderControls from './components/SliderControls'
 type Phase = 'pre-puncture' | 'punctured' | 'advancing' | 'completed'
 
 // デフォルトの穿刺角度（30度）
-const DEFAULT_NEEDLE_ANGLE_DEG = 30
+const DEFAULT_NEEDLE_ANGLE_DEG = 15
 
 /**
- * カメラコントローラー：ズーム対応＋奥行き調整時の断面ビュー
+ * カメラコントローラー：断面図視点固定＋ズーム対応
  */
-function CameraController({ zoom, isAdjustingDepth }: { zoom: number; isAdjustingDepth: boolean }) {
+function CameraController({ zoom }: { zoom: number }) {
     const { camera } = useThree()
-    const targetPos = useRef(new THREE.Vector3(0, 2.5, 5))
-    const targetLookAt = useRef(new THREE.Vector3(0, -0.3, 0))
-    const currentLookAt = useRef(new THREE.Vector3(0, -0.3, 0))
 
     useFrame(() => {
-        if (isAdjustingDepth) {
-            // 奥行き調整時：腕の断面が見える横からの視点
-            targetPos.current.set(4, 0.5, 2)
-            targetLookAt.current.set(0, -0.8, 0.5)
-        } else {
-            // 通常視点
-            targetPos.current.set(0, 2.5 * zoom, 5 * zoom)
-            targetLookAt.current.set(0, -0.3, 0)
-        }
-        camera.position.lerp(targetPos.current, 0.05)
-        currentLookAt.current.lerp(targetLookAt.current, 0.05)
-        camera.lookAt(currentLookAt.current)
+        // 断面図視点（腕の横から見る）をベースにズーム適用
+        const basePos = new THREE.Vector3(4, 0.5, 2)
+        const target = new THREE.Vector3(0, -0.8, 0.5)
+        // ズームでカメラを近づける/遠ざける
+        const direction = basePos.clone().sub(target).normalize()
+        const distance = basePos.distanceTo(target) * zoom
+        const pos = target.clone().add(direction.multiplyScalar(distance))
+        camera.position.lerp(pos, 0.1)
+        camera.lookAt(target)
         camera.updateProjectionMatrix()
     })
 
@@ -48,7 +42,6 @@ function SimulatorScene({
     outerOffset,
     phase,
     zoom,
-    isAdjustingDepth,
     onPuncture,
 }: {
     needlePos: THREE.Vector3
@@ -57,7 +50,6 @@ function SimulatorScene({
     outerOffset: number
     phase: Phase
     zoom: number
-    isAdjustingDepth: boolean
     onPuncture: () => void
 }) {
     useFrame(() => {
@@ -75,7 +67,7 @@ function SimulatorScene({
 
     return (
         <>
-            <CameraController zoom={zoom} isAdjustingDepth={isAdjustingDepth} />
+            <CameraController zoom={zoom} />
 
             {/* ライティング */}
             <ambientLight intensity={0.3} />
@@ -128,9 +120,6 @@ function App() {
     const [outerOffset, setOuterOffset] = useState(0)
     const [zoom, setZoom] = useState(1.0)
     const [needleAngle, setNeedleAngle] = useState(DEFAULT_NEEDLE_ANGLE_DEG)
-    const [isAdjustingDepth, setIsAdjustingDepth] = useState(false)
-    const depthTimer = useRef<ReturnType<typeof setTimeout>>()
-
     // 針の初期位置（左上から開始、右方向へ穿刺）
     // 腕は横向き（X軸方向）、右=拳（末梢）、左=肩（中枢）
     const [needlePos, setNeedlePos] = useState(new THREE.Vector3(1.5, 1.2, 1.5))
@@ -181,16 +170,13 @@ function App() {
         isDragging.current = false
     }, [])
 
-    // --- 奥行き調整（カメラ自動切替付き） ---
+    // --- 奥行き調整 ---
     const adjustDepth = useCallback((delta: number) => {
-        setIsAdjustingDepth(true)
         setNeedlePos((prev) => {
             const p = prev.clone()
             p.z = Math.max(-0.5, Math.min(3.0, p.z + delta))
             return p
         })
-        clearTimeout(depthTimer.current)
-        depthTimer.current = setTimeout(() => setIsAdjustingDepth(false), 800)
     }, [])
 
     // --- マウスホイールでカメラズーム ---
@@ -408,7 +394,6 @@ function App() {
                         outerOffset={outerOffset}
                         phase={phase}
                         zoom={zoom}
-                        isAdjustingDepth={isAdjustingDepth}
                         onPuncture={handlePuncture}
                     />
                 </Canvas>
